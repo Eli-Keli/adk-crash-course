@@ -1,19 +1,20 @@
-# Part 1: Your First Agent - The Day Trip Genie 🧞
+# Part 2: Custom Tools - Weather-Aware Planner 🌦️
 
-Welcome to Part 1 of the ADK Crash Course! In this section, you'll create your first AI agent using the Google Agent Development Kit (ADK).
+Welcome to Part 2 of the ADK Crash Course! In this section, you'll learn how to create custom tools that extend your agent's capabilities.
 
 ## 🎯 What You'll Learn
 
-- How to create a basic AI agent with the ADK
-- How to use built-in tools (Google Search)
-- How to run agents with sessions
-- Understanding the Agent-Runner-Session architecture
+- How to create custom function tools
+- How to call external APIs (U.S. National Weather Service)
+- How to integrate custom tools with built-in tools
+- Best practices for tool docstrings and descriptions
 
 ## 📚 Learning Resources
 
 - **Codelab**: https://codelabs.developers.google.com/onramp/instructions
 - **ADK Documentation**: https://google.github.io/adk-docs/get-started/python/
-- **Notebook Reference**: Part 1 from `ADK_Learning_tools.ipynb`
+- **Notebook Reference**: Section 2.1 from `ADK_Learning_tools.ipynb`
+- **Weather API**: U.S. National Weather Service API (public, no key required)
 
 ---
 
@@ -34,7 +35,9 @@ Welcome to Part 1 of the ADK Crash Course! In this section, you'll create your f
 
 2. **Install dependencies**:
    ```bash
-   pip install google-adk python-dotenv
+   pip install -r requirements.txt
+   # Or manually:
+   # pip install google-adk python-dotenv requests
    ```
 
 3. **Set up your API key**:
@@ -63,10 +66,11 @@ python day_trip_agent/agent.py
 ### Expected Output
 
 You should see:
-1. 🧞 Agent creation message
+1. 🌦️ Agent creation message
 2. 📦 Session creation
-3. 📡 Events as the agent processes your query
-4. ✅ Final itinerary with morning, afternoon, and evening activities
+3. 🛠️ Weather tool being called with location
+4. 📡 Events as the agent processes your query
+5. ✅ Final response with weather details and hiking recommendations
 
 ---
 
@@ -75,13 +79,13 @@ You should see:
 ### The Agent Architecture
 
 ```
-┌─────────────────────────────────────────────────┐
-│            Day Trip Agent 🤖                    │
-├─────────────────────────────────────────────────┤
-│  Model: gemini-2.5-flash                        │
-│  Tools: Google Search                           │
-│  Instruction: Generate budget-aware itineraries │
-└─────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────┐
+│       Weather-Aware Planner 🤖                    │
+├───────────────────────────────────────────────────┤
+│  Model: gemini-2.5-flash                          │
+│  Tools: get_live_weather_forecast, Google Search  │
+│  Instruction: Check weather before outdoor plans  │
+└───────────────────────────────────────────────────┘
                     ↓
           ┌─────────────────┐
           │     Runner      │  ← Executes the agent
@@ -94,13 +98,19 @@ You should see:
 
 ### Key Components
 
-1. **Agent** (`create_day_trip_agent()`):
+1. **Agent** (`create_weather_aware_planner()`):
    - Defines the agent's personality and capabilities
    - Specifies the model to use (gemini-2.5-flash)
-   - Adds tools (google_search)
-   - Provides instruction prompt
+   - Adds custom tool (get_live_weather_forecast) and built-in tool (google_search)
+   - Provides instruction to check weather before suggesting activities
 
-2. **Session** (`InMemorySessionService`):
+2. **Custom Tool** (`get_live_weather_forecast()`):
+   - Python function that calls U.S. National Weather Service API
+   - Docstring serves as the tool's description for the LLM
+   - Returns structured data (temperature and forecast)
+   - Located in `tools/weather.py`
+
+3. **Session** (`InMemorySessionService`):
    - Manages conversation history
    - In this example, we create a new session for each run
    - Later, you'll learn about persistent sessions
