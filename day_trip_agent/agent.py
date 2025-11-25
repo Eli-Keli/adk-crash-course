@@ -1,17 +1,17 @@
 """
-Day Trip Agent - Part 1: Your First Agent
+Day Trip Agent - Part 2: Custom Tools
 
-This script demonstrates how to create a simple but powerful AI agent using the
-Google Agent Development Kit (ADK). The day_trip_agent generates spontaneous
-full-day itineraries based on mood, interests, and budget.
+This script demonstrates how to create an AI agent with custom tools using the
+Google Agent Development Kit (ADK). The weather_aware_planner checks real-time
+weather before making trip recommendations.
 """
 
 import asyncio
 import os
 from pathlib import Path
+import requests
 from dotenv import load_dotenv
 from google.adk.agents import Agent
-from google.adk.tools import google_search
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai.types import Content, Part
@@ -20,28 +20,67 @@ from google.genai.types import Content, Part
 env_path = Path(__file__).parent / '.env'
 load_dotenv(dotenv_path=env_path)
 
+# --- Tool Definition: A function that calls a live public API ---
 
-def create_day_trip_agent():
-    """Create the Spontaneous Day Trip Generator agent."""
+# A simple lookup to avoid needing a separate geocoding API for this example
+LOCATION_COORDINATES = {
+    "sunnyvale": "37.3688,-122.0363",
+    "san francisco": "37.7749,-122.4194",
+    "lake tahoe": "39.0968,-120.0324"
+}
+
+def get_live_weather_forecast(location: str) -> dict:
+    """Gets the current, real-time weather forecast for a specified location in the US.
+
+    Args:
+        location: The city name, e.g., "San Francisco".
+
+    Returns:
+        A dictionary containing the temperature and a detailed forecast.
+    """
+    print(f"🛠️ TOOL CALLED: get_live_weather_forecast(location='{location}')")
+
+    # Find coordinates for the location
+    normalized_location = location.lower()
+    coords_str = None
+    for key, val in LOCATION_COORDINATES.items():
+        if key in normalized_location:
+            coords_str = val
+            break
+    if not coords_str:
+        return {"status": "error", "message": f"I don't have coordinates for {location}."}
+
+    try:
+        # NWS API requires 2 steps: 1. Get the forecast URL from the coordinates.
+        points_url = f"https://api.weather.gov/points/{coords_str}"
+        headers = {"User-Agent": "ADK Example Notebook"}
+        points_response = requests.get(points_url, headers=headers)
+        points_response.raise_for_status()  # Raise an exception for bad status codes
+        forecast_url = points_response.json()['properties']['forecast']
+
+        # 2. Get the actual forecast from the URL.
+        forecast_response = requests.get(forecast_url, headers=headers)
+        forecast_response.raise_for_status()
+
+        # Extract the relevant forecast details
+        current_period = forecast_response.json()['properties']['periods'][0]
+        return {
+            "status": "success",
+            "temperature": f"{current_period['temperature']}°{current_period['temperatureUnit']}",
+            "forecast": current_period['detailedForecast']
+        }
+    except requests.exceptions.RequestException as e:
+        return {"status": "error", "message": f"API request failed: {e}"}
+
+
+def create_weather_aware_planner():
+    """Create the Weather-Aware Trip Planner agent."""
     return Agent(
-        name="day_trip_agent",
+        name="weather_aware_planner",
         model="gemini-2.5-flash",
-        description="Agent specialized in generating spontaneous full-day itineraries based on mood, interests, and budget.",
-        instruction="""
-        You are the "Spontaneous Day Trip" Generator 🚗 - a specialized AI assistant that creates engaging full-day itineraries.
-
-        Your Mission:
-        Transform a simple mood or interest into a complete day-trip adventure with real-time details, while respecting a budget.
-
-        Guidelines:
-        1. **Budget-Aware**: Pay close attention to budget hints like 'cheap', 'affordable', or 'splurge'. Use Google Search to find activities (free museums, parks, paid attractions) that match the user's budget.
-        2. **Full-Day Structure**: Create morning, afternoon, and evening activities.
-        3. **Real-Time Focus**: Search for current operating hours and special events.
-        4. **Mood Matching**: Align suggestions with the requested mood (adventurous, relaxing, artsy, etc.).
-
-        RETURN itinerary in MARKDOWN FORMAT with clear time blocks and specific venue names.
-        """,
-        tools=[google_search]
+        description="A trip planner that checks the real-time weather before making suggestions.",
+        instruction="You are a cautious trip planner. Before suggesting any outdoor activities, you MUST use the `get_live_weather_forecast` tool to check conditions. Incorporate the live weather details into your recommendation.",
+        tools=[get_live_weather_forecast]
     )
 
 
@@ -97,29 +136,30 @@ async def run_agent_query(agent, session_service, session, user_id, query):
 
 
 async def main():
-    """Main function to run the Day Trip Agent demo."""
+    """Main function to run the Weather-Aware Planner demo."""
     
     # Initialize the session service and user ID
     session_service = InMemorySessionService()
     user_id = "adk_adventurer_001"
     
     # Create the agent
-    print("🧞 Creating Day Trip Agent...")
-    agent = create_day_trip_agent()
-    print(f"✅ Agent '{agent.name}' is created and ready for adventure!\n")
+    print("🌦️ Creating Weather-Aware Planner Agent...")
+    weather_agent = create_weather_aware_planner()
+    print(f"✅ Agent '{weather_agent.name}' is created and can now call a live weather API!\n")
     
     # Create a new session for this conversation
     session = await session_service.create_session(
-        app_name=agent.name,
+        app_name=weather_agent.name,
         user_id=user_id
     )
     print(f"📦 Created session: {session.id}\n")
     
-    # Example query with budget constraint
-    query = "Plan a relaxing and artsy day trip near Sunnyvale, CA. Keep it affordable!"
+    # Example query that will trigger the weather tool
+    query = "I want to go hiking near Lake Tahoe, what's the weather like?"
+    print(f"🗣️ User Query: '{query}'\n")
     
     # Run the query
-    await run_agent_query(agent, session_service, session, user_id, query)
+    await run_agent_query(weather_agent, session_service, session, user_id, query)
 
 
 if __name__ == "__main__":
